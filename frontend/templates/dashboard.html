@@ -1,29 +1,25 @@
 {% extends "base.html" %}
-
-{% block title %}Dashboard - All You Need Is Wheel{% endblock %}
-
-{% block extra_head %}
-<!-- Bootstrap Icons CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
-{% endblock %}
-
 {% block content %}
-<!-- Include page header -->
-{% with 
-  title="Dashboard",
-  subtitle="Overview of your portfolio and trading activity"
-%}
-  {% include "partials/components/page_header.html" %}
-{% endwith %}
-
-<!-- Include modular template sections -->
-{% include "partials/dashboard/account_summary.html" %}
-{% include "partials/dashboard/options_table.html" %}
-{% include "partials/dashboard/pending_orders.html" %}
-
+<section class="page-heading"><div><h1>Trading overview</h1></div><button class="button secondary" id="refresh-workspace"><span data-icon="refresh"></span>Refresh account</button></section>
+<div id="account-error"></div>
+<section class="metrics" aria-label="Account summary">
+  <article class="metric"><span class="metric-label">Net liquidation <span data-icon="arrow-up-right"></span></span><strong id="net-value">—</strong><span id="account-context" class="metric-foot">Awaiting broker data</span></article>
+  <article class="metric"><span class="metric-label">Available cash <span data-icon="wallet"></span></span><strong id="cash-value">—</strong><span class="metric-foot">Account cash balance</span></article>
+  <article class="metric"><span class="metric-label">Excess liquidity <span data-icon="shield"></span></span><strong id="liquidity-value">—</strong><span class="metric-foot" id="margin-context">Margin buffer</span></article>
+  <article class="metric tint"><span class="metric-label">Expiring this week <span data-icon="calendar"></span></span><strong id="income-value">—</strong><span class="metric-foot" id="income-context">Entry premium on short positions</span></article>
+</section>
+<section class="panel opportunities" aria-labelledby="opportunities-title">
+  <div class="panel-heading"><div class="section-title"><div><h2 id="opportunities-title">Option scanner</h2></div></div></div>
+  <div class="strategy-tabs" role="tablist" aria-label="Option strategy"><button role="tab" aria-selected="true" data-strategy="PUT" class="strategy-tab active">Cash-secured puts</button><button role="tab" aria-selected="false" data-strategy="CALL" class="strategy-tab">Covered calls</button></div>
+  <form id="scan-form" class="scan-toolbar"><label>Scan scope<select id="scan-scope"><option value="watchlist">All watchlist symbols</option><option value="single">Single symbol</option></select></label><label class="ticker-field">Single symbol<div class="input-icon"><span data-icon="search"></span><input id="ticker-input" name="ticker" placeholder="e.g. AAPL" maxlength="20" autocomplete="off" aria-label="Stock ticker"></div></label><div class="expiry-field"><label id="expiry-label" for="expiry-trigger">Expiration</label><input id="expiry-select" type="hidden" name="expiration"><button id="expiry-trigger" class="expiry-trigger" type="button" aria-haspopup="dialog" aria-controls="expiry-calendar" aria-expanded="false">Choose date</button></div><div class="delta-controls"><fieldset class="delta-fields"><legend>Absolute delta</legend><input id="delta-min" type="number" min="0.01" max="0.99" step="0.01" value="0.05" aria-label="Minimum absolute delta"><span>—</span><input id="delta-max" type="number" min="0.01" max="0.99" step="0.01" value="0.10" aria-label="Maximum absolute delta"></fieldset><div class="delta-target"><span>Target |Δ|</span><output id="target-delta" for="delta-min delta-max" aria-label="System target absolute delta">0.075</output></div></div><button class="button primary" id="scan-button" type="submit"><span data-icon="search"></span>Find options</button></form>
+  <details class="watchlist-editor" aria-labelledby="watchlist-title">
+    <summary class="watchlist-heading"><span id="watchlist-title">Sell-put watchlist</span><span class="watchlist-toggle">Edit watchlist <span class="watchlist-chevron" aria-hidden="true">⌄</span></span></summary>
+    <div class="watchlist-body"><p id="watchlist-storage" class="watchlist-help"></p>
+    <form id="watchlist-add-form" class="watchlist-tools"><label for="watchlist-input">Add symbols</label><input id="watchlist-input" placeholder="TSLA, AMD, PLTR" aria-label="Symbols to add to watchlist" autocomplete="off" maxlength="500"><button class="button secondary small" type="submit">Add symbols</button><button class="button secondary small" id="watchlist-holdings" type="button" title="Replace this watchlist with your currently held stocks">Replace with holdings</button></form>
+  <div id="watchlist" class="watchlist" aria-label="Saved symbols"></div>
+    </div>
+  </details>
+  <div id="scan-result" class="scan-result"><div class="empty-state"><span class="empty-icon" data-icon="compass"></span><h3>Scan your watchlist</h3><p>Add a symbol or load portfolio holdings to compare candidates at your selected expiry and delta range.</p></div></div>
+</section>
+<div class="lower-grid"><section class="panel" aria-labelledby="orders-title"><div class="panel-heading"><div><h2 id="orders-title">Order queue <span class="count" id="order-count">0</span></h2></div><button id="refresh-orders" class="icon-button" aria-label="Refresh order status"><span data-icon="refresh"></span></button></div><div id="orders-content"></div></section><section class="panel income-panel"><div class="panel-heading"><div><h2>Upcoming expirations</h2></div><span data-icon="calendar"></span></div><div id="income-content"></div><a class="panel-link" href="/portfolio">View all positions <span>↗</span></a></section></div>
 {% endblock %}
-
-{% block scripts %}
-<!-- Import modular JavaScript files with ES modules -->
-<script type="module" src="{{ url_for('static', filename='js/dashboard/dashboard.js') }}"></script>
-{% endblock %} 

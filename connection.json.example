@@ -1,9 +1,9 @@
 {
     "host": "127.0.0.1",
-    "port": 7496,
+    "port": 7497,
     "client_id": 1,
-    "readonly": false,
-    "account_id": "YOUR_ACCOUNT_ID",
-    "db_path": "options.db",
-    "comment": "Port 7496 for TWS, 7497 for IB Gateway. Set readonly to true for safety during testing."
+    "readonly": true,
+    "account_id": "",
+    "db_path": "options_paper.db",
+    "comment": "TWS: paper 7497 / live 7496. IB Gateway: paper 4002 / live 4001. Set readonly to true for safety during testing."
 } 

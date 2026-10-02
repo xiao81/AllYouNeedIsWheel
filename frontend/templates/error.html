@@ -1,16 +1,1 @@
-{% extends "base.html" %}
-
-{% block title %}Error {{ error_code }} - All You Need Is Wheel{% endblock %}
-
-{% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8 col-lg-6 text-center py-5">
-        <h1 class="display-1 fw-bold">{{ error_code }}</h1>
-        <h2 class="mb-4">{{ message }}</h2>
-        <p class="lead mb-5">Sorry, something went wrong. Please try again later or contact support if the problem persists.</p>
-        <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg px-4">
-            <i class="bi bi-house-door me-2"></i> Return to Home
-        </a>
-    </div>
-</div>
-{% endblock %} 
+{% extends "base.html" %}{% block page %}error{% endblock %}{% block content %}<div class="empty-state page-error"><p class="eyebrow">{{ error_code }}</p><h1>{{ message }}</h1><p>Let’s get you back to your workspace.</p><a class="button primary" href="/">Back to overview</a></div>{% endblock %}

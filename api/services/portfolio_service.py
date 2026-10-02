@@ -1,230 +1,137 @@
-"""
-Portfolio Service module
-Manages portfolio data and calculations
-"""
+"""Portfolio snapshots shared briefly across the dashboard's read requests."""
 
 import logging
 import random
 import time
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from core.connection import IBConnection
 from config import Config
-import traceback
 
-logger = logging.getLogger('api.services.portfolio')
+logger = logging.getLogger("api.services.portfolio")
+
 
 class PortfolioService:
-    """
-    Service for handling portfolio operations
-    """
     def __init__(self):
         self.config = Config()
-        logger.info(f"Portfolio service using port: {self.config.get('port')}")
         self.connection = None
-        
+        self._portfolio_cache = None
+
     def _ensure_connection(self):
-        """
-        Ensure that the IB connection exists and is connected
-        """
-        try:
-            if self.connection is None or not self.connection.is_connected():
-                # Generate a unique client ID based on current timestamp and random number
-                # to avoid conflicts with other connections
-                unique_client_id = int(time.time() % 10000) + random.randint(1000, 9999)
-                logger.info(f"Creating new TWS connection with client ID: {unique_client_id}")
-                
-                # Create new connection
-                port = self.config.get('port', 7497)
-                logger.info(f"Connecting to TWS on port: {port}")
-                
-                self.connection = IBConnection(
-                    host=self.config.get('host', '127.0.0.1'),
-                    port=port,
-                    client_id=unique_client_id,  # Use the unique client ID instead of fixed ID 1
-                    timeout=self.config.get('timeout', 20),
-                    readonly=self.config.get('readonly', True)
-                )
-                
-                # Try to connect with proper error handling
-                if not self.connection.connect():
-                    logger.error("Failed to connect to TWS/IB Gateway")
-                else:
-                    logger.info("Successfully connected to TWS/IB Gateway")
-            return self.connection
-        except Exception as e:
-            logger.error(f"Error ensuring connection: {str(e)}")
-            if "There is no current event loop" in str(e):
-                logger.error("Asyncio event loop error - please check connection.py for proper handling")
-            return None
-        
+        if self.connection is None:
+            self.connection = IBConnection(
+                host=self.config.get("host", "127.0.0.1"),
+                port=self.config.get("port", 7497),
+                client_id=random.randint(10000, 2000000000),
+                readonly=self.config.get("readonly", True),
+                timeout=self.config.get("timeout", 10),
+                account_id=self.config.get("account_id"),
+            )
+        if not self.connection.is_connected() and not self.connection.connect():
+            raise ConnectionError(
+                "Cannot connect to the broker. Check Settings and your broker session."
+            )
+        return self.connection
+
+    def _portfolio(self):
+        if self._portfolio_cache and time.monotonic() - self._portfolio_cache[0] < 3:
+            return self._portfolio_cache[1]
+        result = self._ensure_connection().get_portfolio()
+        if not result:
+            raise ConnectionError("No portfolio data available from broker")
+        self._portfolio_cache = time.monotonic(), result
+        return result
+
     def get_portfolio_summary(self):
-        """
-        Get account summary information including cash balance and account value
-        
-        Returns:
-            dict: Portfolio summary data
-        """
-        try:
-            conn = self._ensure_connection()
-            if not conn:
-                logger.error("No connection available for portfolio summary.")
-                return None
-            
-            portfolio = conn.get_portfolio()
-            
-            # Extract the relevant information
-            return {
-                'account_id': portfolio.get('account_id', ''),
-                'cash_balance': portfolio.get('available_cash', 0),
-                'account_value': portfolio.get('account_value', 0),
-                'excess_liquidity': portfolio.get('excess_liquidity', 0),
-                'initial_margin': portfolio.get('initial_margin', 0),
-                'leverage_percentage': portfolio.get('leverage_percentage', 0),
-                'is_frozen': portfolio.get('is_frozen', False)
-            }
-        except Exception as e:
-            logger.error(f"Error getting portfolio summary: {e}")
-            logger.error(traceback.format_exc())
-            return None
-    
+        portfolio = self._portfolio()
+        return {
+            "account_id": portfolio.get("account_id", ""),
+            "cash_balance": portfolio.get("available_cash", 0),
+            "account_value": portfolio.get("account_value", 0),
+            "excess_liquidity": portfolio.get("excess_liquidity", 0),
+            "initial_margin": portfolio.get("initial_margin", 0),
+            "leverage_percentage": portfolio.get("leverage_percentage", 0),
+            "is_frozen": portfolio.get("is_frozen", False),
+        }
+
     def get_positions(self, security_type=None):
-        """
-        Get portfolio positions, optionally filtered by security type
-        
-        Args:
-            security_type (str, optional): Filter by security type (e.g., 'STK', 'OPT')
-            
-        Returns:
-            list: List of position dictionaries
-        """
-        try:
-            conn = self._ensure_connection()
-            if not conn:
-                logger.error("No connection available for positions.")
-                return []
-            
-            # Get portfolio data from IB connection
-            portfolio = conn.get_portfolio()
-            positions = portfolio.get('positions', {})
-            
-            # Convert positions dict to list format expected by the API
-            positions_list = []
-            for key, pos in positions.items():
-                contract = pos.get('contract')
-                if not contract:
-                    continue
-                
-                # Skip if filtering by security type and this doesn't match
-                pos_type = pos.get('security_type', '')
-                if security_type and pos_type != security_type:
-                    continue
-                # Build position dictionary
-                position_data = {
-                    'symbol': contract.symbol if hasattr(contract, 'symbol') else '',
-                    'position': pos.get('shares', 0),
-                    'market_price': pos.get('market_price', 0),
-                    'market_value': pos.get('market_value', 0),
-                    'avg_cost': pos.get('avg_cost', 0),
-                    'unrealized_pnl': pos.get('unrealized_pnl', 0),
-                    'security_type': pos_type
-                }
-                
-                # Add option-specific fields if this is an option
-                if pos_type == 'OPT' and hasattr(contract, 'lastTradeDateOrContractMonth') and hasattr(contract, 'strike') and hasattr(contract, 'right'):
-                    position_data.update({
-                        'expiration': contract.lastTradeDateOrContractMonth,
-                        'strike': contract.strike,
-                        'option_type': 'CALL' if contract.right == 'C' else 'PUT'
-                    })
-                
-                positions_list.append(position_data)
-            
-            return positions_list
-        except Exception as e:
-            logger.error(f"Error getting positions: {e}")
-            logger.error(traceback.format_exc())
-            return []
-    
-    def get_weekly_option_income(self):
-        """
-        Get expected weekly income from option positions expiring this week
-        
-        Returns:
-            dict: Weekly income summary and position details
-        """
-        try:
-            conn = self._ensure_connection()
-            if not conn:
-                logger.error("No connection available for weekly income.")
-                return {'positions': [], 'total_income': 0, 'positions_count': 0}
-            
-            # Get all positions from the portfolio
-            positions = self.get_positions('OPT')  # Just option positions
-            
-            # Filter for short option positions expiring this week
-            from datetime import datetime, timedelta
-            today = datetime.now()
-            # Calculate the end of the week (next Friday if today is after Friday)
-            days_until_friday = (4 - today.weekday()) % 7
-            this_friday = today + timedelta(days=days_until_friday)
-            this_friday_str = this_friday.strftime('%Y%m%d')
-            
-            # Filter positions expiring this week that are short options
-            weekly_positions = []
-            total_income = 0
-            total_commission = 0
-            
-            for pos in positions:
-                # Skip if not a short position (negative position means short)
-                if pos.get('position', 0) >= 0:
-                    continue
-                    
-                # Check if option expires this week
-                if pos.get('expiration') <= this_friday_str:
-                    # Calculate the income for this position
-                    # For short options, we receive premium, so we use absolute value
-                    contracts = abs(pos.get('position', 0))
-                    premium_per_contract = pos.get('avg_cost', 0)  # Already in dollar terms per contract
-                    income = premium_per_contract * contracts
-                    
-                    # Try to get commission if available, estimate if not
-                    commission = pos.get('commission', 0)
-                    
-                    # Add income and commission to totals
-                    total_income += income
-                    total_commission += commission
-                    
-                    # Calculate notional value for PUT options (strike price × 100 × number of contracts)
-                    notional_value = None
-                    if pos.get('option_type') == 'PUT':
-                        strike = pos.get('strike', 0)
-                        notional_value = strike * 100 * contracts
-                    
-                    # Add position details to the result
-                    weekly_positions.append({
-                        'symbol': pos.get('symbol', ''),
-                        'option_type': pos.get('option_type', ''),
-                        'strike': pos.get('strike', 0),
-                        'expiration': pos.get('expiration', ''),
-                        'position': pos.get('position', 0),
-                        'premium_per_contract': pos.get('avg_cost', 0),
-                        'avg_cost': pos.get('avg_cost', 0),  # Include both field names for compatibility
-                        'income': income,
-                        'commission': commission,
-                        'notional_value': notional_value
-                    })
-            
-            # Build result dictionary
-            result = {
-                'positions': weekly_positions,
-                'total_income': total_income,
-                'total_commission': total_commission,
-                'positions_count': len(weekly_positions),
-                'this_friday': this_friday.strftime('%Y-%m-%d'),
-                'total_put_notional': sum(pos.get('notional_value', 0) for pos in weekly_positions if pos.get('option_type') == 'PUT')
+        result = []
+        for position in self._portfolio().get("positions", {}).values():
+            contract = position.get("contract")
+            kind = position.get("security_type")
+            if not contract or (security_type and kind != security_type):
+                continue
+            item = {
+                "symbol": contract.symbol,
+                "position": position.get("shares", 0),
+                "market_price": position.get("market_price"),
+                "market_value": position.get("market_value"),
+                "avg_cost": position.get("avg_cost"),
+                "unrealized_pnl": position.get("unrealized_pnl"),
+                "security_type": kind,
             }
-            
-            return result
-        except Exception as e:
-            logger.error(f"Error getting weekly option income: {e}")
-            logger.error(traceback.format_exc())
-            return {'positions': [], 'total_income': 0, 'positions_count': 0}
+            if kind == "OPT":
+                item.update(
+                    con_id=contract.conId,
+                    delta=None,
+                    expiration=contract.lastTradeDateOrContractMonth,
+                    strike=contract.strike,
+                    option_type="CALL" if contract.right == "C" else "PUT",
+                )
+            result.append(item)
+        return result
+
+    def get_position_deltas(self):
+        from core.position_greeks import position_deltas
+
+        contracts = {
+            position["contract"].conId: position["contract"]
+            for position in self._portfolio().get("positions", {}).values()
+            if position.get("security_type") == "OPT" and position.get("contract")
+        }
+        if not contracts:
+            return []
+        connection = self._ensure_connection()
+        key = tuple(sorted(contracts))
+        cached = getattr(connection, "_position_delta_cache", None)
+        if cached and cached[0] == key and time.monotonic() - cached[1] < 15:
+            return cached[2]
+        result = connection.ib._run(position_deltas(connection, contracts.values()))
+        connection._position_delta_cache = key, time.monotonic(), result
+        return result
+
+    def get_weekly_option_income(self):
+        today = datetime.now(ZoneInfo("America/New_York"))
+        friday = today + timedelta(days=(4 - today.weekday()) % 7)
+        weekly = []
+        for position in self.get_positions("OPT"):
+            if position["position"] >= 0 or not today.strftime("%Y%m%d") <= position[
+                "expiration"
+            ] <= friday.strftime("%Y%m%d"):
+                continue
+            contracts = abs(position["position"])
+            premium = (
+                position.get("avg_cost") or 0
+            )  # IB option average cost is per contract.
+            notional = (
+                position["strike"] * 100 * contracts
+                if position["option_type"] == "PUT"
+                else None
+            )
+            weekly.append(
+                {
+                    **position,
+                    "premium_per_contract": premium,
+                    "income": premium * contracts,
+                    "notional_value": notional,
+                    "commission": 0,
+                }
+            )
+        return {
+            "positions": weekly,
+            "positions_count": len(weekly),
+            "total_income": sum(item["income"] for item in weekly),
+            "total_commission": 0,
+            "total_put_notional": sum(item["notional_value"] or 0 for item in weekly),
+            "this_friday": friday.strftime("%Y-%m-%d"),
+        }

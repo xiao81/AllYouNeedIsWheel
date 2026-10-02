@@ -32,3 +32,19 @@ options.db
 trades.db 
 
 connection*.json
+settings.json
+.settings-*
+
+# Local credentials and operating-system files
+.env
+.env.*
+!.env.example
+.DS_Store
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db-*
+*.log
+*.pem
+*.key

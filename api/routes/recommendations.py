@@ -2,7 +2,6 @@
 Options Recommendations API routes
 """
 
-from flask import Blueprint, request, jsonify
-from api.services.options_service import OptionsService
+from flask import Blueprint
 
-bp = Blueprint('recommendations', __name__, url_prefix='/api/recommendations')
+bp = Blueprint("recommendations", __name__, url_prefix="/api/recommendations")
