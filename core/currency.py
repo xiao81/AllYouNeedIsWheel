@@ -5,9 +5,10 @@ Currency conversion and currency-related utilities for AllYouNeedIsWheel
 from currency_converter import CurrencyConverter
 import logging
 
-logger = logging.getLogger('autotrader.currency')
+logger = logging.getLogger("autotrader.currency")
 
-BASE_CURRENCY = 'USD'
+BASE_CURRENCY = "USD"
+
 
 class CurrencyHelper:
     converter = CurrencyConverter()
@@ -19,7 +20,9 @@ class CurrencyHelper:
         try:
             return CurrencyHelper.converter.convert(1, from_currency, to_currency)
         except Exception as e:
-            logger.warning(f"Could not get exchange rate for {from_currency} to {to_currency}: {e}")
+            logger.warning(
+                f"Could not get exchange rate for {from_currency} to {to_currency}: {e}"
+            )
             return 1.0
 
     @staticmethod
